@@ -36,6 +36,11 @@
   <ItemGroup>
     <None Include="fragment.glsl" />
     <None Include="vertex.glsl" />
-    <None Include="fragment_textured.glsl" />
+    <None Include="vertex_textured.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="fragment_textured.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
