@@ -15,124 +15,197 @@
 
 SDL_Window* displayWindow;
 
-GLuint LoadTexturePNG(const char *image_path) {
-	SDL_Surface *surface = IMG_Load(image_path);
-	GLuint textureID;
-	glGenTextures(1, &textureID);
-	glBindTexture(GL_TEXTURE_2D, textureID);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0, GL_RGBA,
-		GL_UNSIGNED_BYTE, surface->pixels);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	SDL_FreeSurface(surface);
-	return textureID;
+class Entity{
+public:
+
+	Entity(ShaderProgram& shadeProgram):program(shadeProgram){
+		projection.setOrthoProjection(-1.777f, 1.777f, -1.0f, 1.0f, -1.0f, 1.0f);
+	}
+
+	void Draw(float vertices[]){
+		glVertexAttribPointer(program.positionAttribute, 2, GL_FLOAT, false, 0, vertices);
+		glEnableVertexAttribArray(program.positionAttribute);
+
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glDisableVertexAttribArray(program.positionAttribute);
+
+		if (vertices[0] != vertices[2]){
+			width = abs(vertices[0] - vertices[2]);
+		}
+		else{
+			width = abs(vertices[0] - vertices[4]);
+		}
+		if (vertices[1] != vertices[3]){
+			height = abs(vertices[1] - vertices[3]);
+		}
+		else{
+			height = abs(vertices[1] - vertices[5]);
+		}
+	};
+
+	void setMatrix(){
+		program.setModelMatrix(model);
+		program.setProjectionMatrix(projection);
+		program.setViewMatrix(view);
+	};
+
+	void setIdentityMatrix(){
+		model.identity();
+	}
+
+	void moveLeft(float amount){
+		x = -1 * amount;
+		model.Translate(x, 0.0, 0.0);
+	};
+
+	void moveRight(float amount){
+		x = amount;
+		model.Translate(x, 0.0, 0.0);
+	};
+
+	void moveUp(float amount){
+		float val = amount;
+		y += val;
+		model.Translate(0.0, val, 0.0);
+	};
+
+	void moveDown(float amount){
+		float val = -1 * amount;
+		y += val;
+		model.Translate(0.0, val, 0.0);
+	};
+
+	void move(float xAxis, float yAxis){
+		x += xAxis;
+		y += yAxis;
+		model.Translate(x, y, 0.0);
+	}
+
+	float x = 0;
+	float y = 0;
+	float rotation;
+	
+	int textureID;
+
+	float width;
+	float height;
+
+	float speed;
+	float directionX = 1.0;
+	float directionY = 1.0;
+
+	ShaderProgram program;
+	Matrix model, projection, view;
+};
+
+class Time{
+
+	float elapsed;
+	float lastFrameTicks = 0.0f;
+	float ticks;
+public:
+	float getTime(){
+		ticks = (float)SDL_GetTicks() / 1000.0f;
+		elapsed = ticks - lastFrameTicks;
+		lastFrameTicks = ticks;
+		return elapsed;
+	}
+};
+
+void movePaddles(Entity& leftPaddle, Entity& rightPaddle, float &elapsed){
+	const Uint8 *keys = SDL_GetKeyboardState(NULL);
+
+	//left paddle
+	if (keys[SDL_SCANCODE_W]){
+		leftPaddle.moveUp(0.7 * elapsed);
+	}
+	else if (keys[SDL_SCANCODE_S]){
+		leftPaddle.moveDown(0.7 * elapsed);
+	}
+
+	if (keys[SDL_SCANCODE_UP]){
+		rightPaddle.moveUp(0.7 * elapsed);
+	}
+	else if (keys[SDL_SCANCODE_DOWN]){
+		rightPaddle.moveDown(0.7 * elapsed);
+	}
 }
 
-GLuint LoadTexture(const char *image_path) {
-	SDL_Surface *surface = IMG_Load(image_path);
-	GLuint textureID;
-	glGenTextures(1, &textureID);
-	glBindTexture(GL_TEXTURE_2D, textureID);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, surface->w, surface->h, 0, GL_RGB,
-		GL_UNSIGNED_BYTE, surface->pixels);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	SDL_FreeSurface(surface);
-	return textureID;
+
+void moveBall(Entity& ball, float elapsed){
+	ball.setIdentityMatrix();
+	ball.move(0.7 * elapsed * ball.directionX, 0.7 * elapsed * ball.directionY);
 }
 
-void texturize(ShaderProgram program, GLuint texture, float *vertices, float *texCoords){
-	glEnable(GL_BLEND);
-	glBindTexture(GL_TEXTURE_2D, texture);
+void detectCollision(Entity& ball, Entity& leftPaddle, Entity& rightPaddle, float elapsed){
+	if (ball.y >= 0.99 || ball.y <= -0.99){
+		ball.directionY *= -1;
+	}
 
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glVertexAttribPointer(program.positionAttribute, 2, GL_FLOAT, false, 0, vertices);
-	glEnableVertexAttribArray(program.positionAttribute);
-	glVertexAttribPointer(program.texCoordAttribute, 2, GL_FLOAT, false, 0, texCoords);
-	glEnableVertexAttribArray(program.texCoordAttribute);
-	glDrawArrays(GL_TRIANGLES, 0, 6);
-	glDisableVertexAttribArray(program.positionAttribute);
-	glDisableVertexAttribArray(program.texCoordAttribute);
+	if ((ball.x + ball.width/2) >= (rightPaddle.x - rightPaddle.width / 2) && 
+		(ball.x - ball.width/2) <= (rightPaddle.x + rightPaddle.width / 2) &&
+		(ball.y - ball.height/2) <= (rightPaddle.y + rightPaddle.height/2) &&
+		(ball.y + ball.height / 2) >= (rightPaddle.y - rightPaddle.height / 2) ){
+		ball.directionX *= -1;
+	}
+
+	if ((ball.x + ball.width / 2) >= (leftPaddle.x - leftPaddle.width / 2) &&
+		(ball.x - ball.width / 2) <= (leftPaddle.x + leftPaddle.width / 2) &&
+		(ball.y - ball.height / 2) <= (leftPaddle.y + leftPaddle.height / 2) &&
+		(ball.y + ball.height / 2) >= (leftPaddle.y - leftPaddle.height / 2)){
+		ball.directionX *= -1;
+	}
+
+};
+
+void detectWin(Entity& ball, float& elapsed){
+	if (ball.x >= 1.77 || ball.x <= -1.77){
+		ball.x = 0.0;
+		ball.y = 0.0;
+		glClearColor((float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX, 1.0);
+	}
 }
 
 int main(int argc, char *argv[])
 {
 	SDL_Init(SDL_INIT_VIDEO);
-	displayWindow = SDL_CreateWindow("My Game", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1440, 720, SDL_WINDOW_OPENGL);
+	displayWindow = SDL_CreateWindow("My Game", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL);
 	SDL_GLContext context = SDL_GL_CreateContext(displayWindow);
 	SDL_GL_MakeCurrent(displayWindow, context);
 	#ifdef _WINDOWS
 		glewInit();
 	#endif
-	
-	glClearColor(0.4f, 0.2f, 0.4f, 1.0f);
 
-	glViewport(0, 0, 1440, 720);
-	ShaderProgram program(RESOURCE_FOLDER"vertex_textured.glsl", RESOURCE_FOLDER"fragment_textured.glsl");
-	GLuint moon = LoadTexturePNG("moon.png");
-	GLuint earth = LoadTexture("earth.jpg");
-	GLuint sun = LoadTexture("sun.jpeg");
+	glViewport(0, 0, 1280, 720);
 
-	Matrix moonProjectionMatrix;
-	Matrix moonModelMatrix;
-	Matrix moonViewMatrix;
+	ShaderProgram program(RESOURCE_FOLDER"vertex.glsl", RESOURCE_FOLDER"fragment.glsl");
 
-	Matrix earthProjectionMatrix;
-	Matrix earthModelMatrix;
-	Matrix earthViewMatrix;
+	Entity rightpaddle(program);
+	rightpaddle.moveRight(1.50);
 
-	Matrix sunProjectionMatrix;
-	Matrix sunModelMatrix;
-	Matrix sunViewMatrix;
+	Entity ball(program);
 
-	moonProjectionMatrix.setOrthoProjection(-3.55, 3.55, -2.0f, 2.0f, -1.0f, 1.0f);
-	earthProjectionMatrix.setOrthoProjection(-3.55, 3.55, -2.0f, 2.0f, -1.0f, 1.0f);
-	sunProjectionMatrix.setOrthoProjection(-3.55, 3.55, -2.0f, 2.0f, -1.0f, 1.0f);
-	glUseProgram(program.programID);
+	Entity leftpaddle(program);
+	leftpaddle.moveLeft(1.50);
 
+	Time counter;
+	float elapsed;
 
-	float lastFrameTicks;
-
-	float moonVertices[] = { 0.0, 2.0,
-		0.0, 1.0,
-		1.0, 1.0,
-		0.0, 2.0,
-		1.0, 1.0,
-		1.0, 2.0,
+	float paddleVertex[] = { -0.025, -0.175,
+		0.025, -0.175,
+		0.025, 0.175,
+		-0.025, -0.175,
+		0.025, 0.175,
+		-0.025, 0.175
 	};
-	float moonTexCoords[] = { 0.0, 1.0,
-		1.0, 1.0,
-		1.0, 0.0,
-		0.0, 1.0,
-		1.0, 0.0,
-		0.0, 0.0 };
 
-	float earthVertices[] = { -2.0, -0.0,
-		-2.0, -0.5,
-		-1.5, -0.5,
-		-2.0, -0.0,
-		-1.5, -0.5,
-		-1.5, -0.0 };
-	float earthTexCoords[] = { 0.0, 0.0,
-		0.0, 1.0,
-		1.0, 1.0,
-		0.0, 0.0,
-		1.0, 1.0,
-		1.0, 0.0 };
-
-	float sunVertices[] = { -0.5, -0.5,
-		0.5, -0.5,
-		0.5, 0.5,
-		-0.5, -0.5,
-		0.5, 0.5,
-		-0.5, 0.5 };
-	float sunTexCoords[] = { 0.0, 0.0,
-		0.0, 1.0,
-		1.0, 1.0,
-		0.0, 0.0,
-		1.0, 1.0,
-		1.0, 0.0 };
-
+	float ballVertex[] = { -0.035, -0.035,
+		0.035, -0.035,
+		0.035, 0.035,
+		-0.035, -0.035,
+		0.035, 0.035,
+		-0.035, 0.035
+	};
 
 	SDL_Event event;
 	bool done = false;
@@ -143,38 +216,26 @@ int main(int argc, char *argv[])
 			}
 		}
 		glClear(GL_COLOR_BUFFER_BIT);
+
+		elapsed = counter.getTime();
+
+		rightpaddle.setMatrix();
+		rightpaddle.Draw(paddleVertex);
+
+		ball.setMatrix();
+		ball.Draw(ballVertex);
+
+		leftpaddle.setMatrix();
+		leftpaddle.Draw(paddleVertex);
+
+		detectCollision(ball, leftpaddle, rightpaddle, elapsed);
 		
+		movePaddles(leftpaddle, rightpaddle, elapsed);
+		moveBall(ball, elapsed);
 
-		
+		detectWin(ball, elapsed);
 
-		program.setModelMatrix(moonModelMatrix);
-		program.setProjectionMatrix(moonProjectionMatrix);
-		program.setViewMatrix(moonViewMatrix);
-		//moonModelMatrix.identity();
-
-		program.setModelMatrix(earthModelMatrix);
-		program.setProjectionMatrix(earthProjectionMatrix);
-		program.setViewMatrix(earthViewMatrix);
-		//earthModelMatrix.identity();
-
-		program.setModelMatrix(sunModelMatrix);
-		program.setProjectionMatrix(sunProjectionMatrix);
-		program.setViewMatrix(sunViewMatrix);
-		//sunModelMatrix.identity();
-
-		sunModelMatrix.Rotate(0.1 * (3.14159 / 180));
-
-		texturize(program, moon, moonVertices, moonTexCoords);
-		texturize(program, earth, earthVertices, earthTexCoords);
-		texturize(program, sun, sunVertices, sunTexCoords);
-		
-		//float ticks = (float)SDL_GetTicks() / 1000.0f;
-		//lastFrameTicks = ticks;
-		//float elapsed = ticks - lastFrameTicks;
-		
-
-		SDL_GL_SwapWindow(displayWindow);
-
+		SDL_GL_SwapWindow(displayWindow);// keep at bottom
 	}
 
 	SDL_Quit();
