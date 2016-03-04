@@ -138,7 +138,7 @@ public:
 	float directionX = 1.0;
 	float directionY = 1.0;
 
-	bool shouldRemove;
+	bool shouldRemove = false;
 
 	ShaderProgram *program;
 	Matrix model, projection, view;
@@ -147,9 +147,10 @@ public:
 class Time{
 
 	float elapsed;
-	float lastFrameTicks = 0.0f;
+	
 	float ticks;
 public:
+	float lastFrameTicks = 0.0f;
 	float getTime(){
 		ticks = (float)SDL_GetTicks() / 1000.0f;
 		elapsed = ticks - lastFrameTicks;
@@ -354,11 +355,13 @@ void runGame(int& state, SDL_Event& event){
 			++l;
 		}
 		enemies.push_back(temp);
+		enemies[i].setMatrix();
 		enemies[i].setPosition((1.77 / 5) * j, (0.99 / 5) * l);
 
 	}
 
 	Time counter;
+	counter.lastFrameTicks = SDL_GetTicks() / 1000.0f;
 	float elapsed;
 
 	//glUseProgram(program.programID);
@@ -380,6 +383,7 @@ void runGame(int& state, SDL_Event& event){
 		}
 		glClear(GL_COLOR_BUFFER_BIT);
 
+		
 		elapsed = counter.getTime();
 
 		for (int i = 0; i < enemies.size(); ++i){
@@ -429,7 +433,7 @@ void runGame(int& state, SDL_Event& event){
 			}
 		}
 
-		if (player.shouldRemove){
+		if (player.shouldRemove || enemies.size() == 0){
 			state = 2;
 			break;
 		}
@@ -439,7 +443,34 @@ void runGame(int& state, SDL_Event& event){
 }
 
 void gameOver(int& state, SDL_Event& event){
-	
+	ShaderProgram program(RESOURCE_FOLDER"vertex_textured.glsl", RESOURCE_FOLDER"fragment_textured.glsl");
+	GLuint fontsheet = LoadTexture("font1.png");
+
+	Entity text = Entity(&program, fontsheet);
+	text.setPosition(-1.3, 0);
+
+	bool done = false;
+	while (!done) {
+		while (SDL_PollEvent(&event)) {
+			if (event.type == SDL_QUIT || event.type == SDL_WINDOWEVENT_CLOSE) {
+				done = true;
+				state = 3;
+			}
+			else if (event.type == SDL_KEYDOWN){
+				if (event.key.keysym.scancode == SDL_SCANCODE_RETURN){
+					done = true;
+					state = 1;
+				}
+			}
+		}
+
+		text.setMatrix();
+
+		DrawText(&program, fontsheet, "Game Over: Press enter to play again", 0.08, 0.0);
+
+
+		SDL_GL_SwapWindow(displayWindow);
+	}
 }
 
 int main(int argc, char *argv[])
@@ -471,10 +502,14 @@ int main(int argc, char *argv[])
 		switch (state){
 		case MAIN:
 			titleScreen(state, event);
+			break;
 		case GAME:
+			glClear(GL_COLOR_BUFFER_BIT);
 			runGame(state, event);
+			break;
 		case OVER:
 			gameOver(state, event);
+			break;
 		case CLOSE:
 			done = true;
 			break;
