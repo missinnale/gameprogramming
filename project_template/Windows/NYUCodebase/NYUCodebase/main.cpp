@@ -7,6 +7,7 @@
 #include "ShaderProgram.h"
 #include "Matrix.h"
 #include <vector>
+#include <SDL_mixer.h>
 using namespace std;
 
 #ifdef _WINDOWS
@@ -335,6 +336,12 @@ void runGame(int& state, SDL_Event& event){
 	ShaderProgram program(RESOURCE_FOLDER"vertex_textured.glsl", RESOURCE_FOLDER"fragment_textured.glsl");
 	GLuint spriteSheet = LoadTexture("sheet.png");
 
+	Mix_Chunk *killSound;
+	killSound = Mix_LoadWAV("sfxKill.wav");
+
+	Mix_Chunk *shootSound;
+	shootSound = Mix_LoadWAV("sfxShoot.wav");
+
 	Entity player = Entity(&program, spriteSheet, 211.0 / 1024.0, 941 / 1024.0, 99 / 1024.0, 75 / 1024.0, 0.1);
 	player.setPosition(0.0, -0.8);
 	//Entity playerBullet = Entity(&program, spriteSheet, 856 / 1024.0, 869 / 1024.0, 9 / 1024.0, 57 / 1024.0, 0.1);
@@ -378,6 +385,8 @@ void runGame(int& state, SDL_Event& event){
 				if (event.key.keysym.scancode == SDL_SCANCODE_SPACE){
 					fireBullet(player, &playerBullets, true);
 					enemyFires(&enemies, &enemyBullets);
+
+					Mix_PlayChannel(-1, shootSound, 0);
 				}
 			}
 		}
@@ -423,6 +432,9 @@ void runGame(int& state, SDL_Event& event){
 			if (enemies[i].shouldRemove){
 				enemies.erase(enemies.begin() + i);
 				--i;
+
+				Mix_PlayChannel(-1, killSound, 0);
+
 			}
 		}
 
@@ -435,11 +447,16 @@ void runGame(int& state, SDL_Event& event){
 
 		if (player.shouldRemove || enemies.size() == 0){
 			state = 2;
+			
 			break;
 		}
 
 		SDL_GL_SwapWindow(displayWindow);// keep at bottom
 	}
+
+	Mix_FreeChunk(killSound);
+	Mix_FreeChunk(shootSound);
+	
 }
 
 void gameOver(int& state, SDL_Event& event){
@@ -485,10 +502,16 @@ int main(int argc, char *argv[])
 
 	glViewport(0, 0, 1280, 720);
 
-	
+	Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 4096);
 
 	enum gameState { MAIN, GAME, OVER, CLOSE};
 	int state = MAIN;
+
+	Mix_Music *music;
+	music = Mix_LoadMUS("spaceInvadersMusic.mp3");
+
+	Mix_Chunk *dieSound;
+	dieSound = Mix_LoadWAV("sfxDie.wav");
 
 	bool done = false;
 	SDL_Event event;
@@ -499,6 +522,8 @@ int main(int argc, char *argv[])
 			}
 		}
 
+		Mix_PlayMusic(music, -1);
+
 		switch (state){
 		case MAIN:
 			titleScreen(state, event);
@@ -508,6 +533,7 @@ int main(int argc, char *argv[])
 			runGame(state, event);
 			break;
 		case OVER:
+			Mix_PlayChannel(-1, dieSound, 0);
 			gameOver(state, event);
 			break;
 		case CLOSE:
@@ -515,6 +541,9 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
+
+	Mix_FreeChunk(dieSound);
+	Mix_FreeMusic(music);
 
 	SDL_Quit();
 	return 0;
