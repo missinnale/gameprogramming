@@ -20,10 +20,12 @@ SDL_Window* displayWindow;
 
 class Entity{
 public:
-	Entity(ShaderProgram* shadeProgram, int texture) :program(shadeProgram), textureID(texture){ projection.setOrthoProjection(-1.777f, 1.777f, -1.0f, 1.0f, -1.0f, 1.0f); }
+	Entity(ShaderProgram* shadeProgram, int texture) :program(shadeProgram), textureID(texture){ projection.setOrthoProjection(-1.777f, 1.777f, -1.0f, 1.0f, -1.0f, 1.0f); sprite = false; }
 	Entity(ShaderProgram *shadeProgram, int texture, float uCoord, float vCoord, float width, float height, float size) :program(shadeProgram), textureID(texture),
 	u(uCoord), v(vCoord), width(width), height(height), size(size){
-		projection.setOrthoProjection(-1.777f, 1.777f, -1.0f, 1.0f, -1.0f, 1.0f);
+		//projection.setOrthoProjection(-1.777f, 1.777f, -1.0f, 1.0f, -1.0f, 1.0f);
+		projection.setOrthoProjection(-2.777f, 2.777f, -2.0f, 2.0f, -2.0f, 2.0f);
+		sprite = true;
 	}
 
 	void Draw(/*float vertices[]*/){
@@ -44,22 +46,44 @@ public:
 
 		glBindTexture(GL_TEXTURE_2D, textureID);
 		GLfloat texCoords[] = {
-			u, v + height,
-			u + width, v,
-			u, v,
-			u + width, v,
-			u, v + height,
-			u + width, v + height
+			0, 1,
+			1, 0,
+			0, 0,
+			1, 0,
+			0, 1,
+			1, 1
 		};
+		if (sprite){
+			texCoords[0] = u;
+			texCoords[1] = v + height;
+			texCoords[2] = u + width;
+			texCoords[3] = v;
+			texCoords[4] = u;
+			texCoords[5] = v;
+			texCoords[6] = u + width;
+			texCoords[7] = v;
+			texCoords[8] = u;
+			texCoords[9] = v + height;
+			texCoords[10] = u + width;
+			texCoords[11] = v + height;
+		}
 
 		float aspect = width / height;
-		float vertices[] = {
+		/*float vertices[] = {
 			-0.5f * size * aspect, -0.5 * size,
 			0.5f * size * aspect, 0.5 * size,
 			-0.5f * size * aspect, 0.5 * size,
 			0.5f * size * aspect, 0.5 * size,
 			-0.5f * size * aspect, -0.5 * size,
 			0.5f * size * aspect, -0.5 * size
+		};*/
+		float vertices[] = {
+			-width/2 * size, -height/2 * size,
+			width/2 * size, height/2 * size,
+			-width/2 * size, height/2 * size,
+			width/2 * size, height/2 * size,
+			-width/2 * size, -height/2 * size,
+			width/2 * size, -height/2 *size
 		};
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -110,7 +134,7 @@ public:
 	void move(float xAxis, float yAxis){
 		x += xAxis;
 		y += yAxis;
-		model.setPosition(x, y, 0.0);
+		model.Translate(xAxis, yAxis, 0.0);
 	}
 
 	void translate(float x, float y){
@@ -123,8 +147,34 @@ public:
 		model.setPosition(x, y, 0.0);
 	}
 
+	void rotate(float value){
+		rotation += value * 180/3.14159;
+		model.Rotate(value);
+	}
+
+	void checkLocation(){
+		model.Rotate(-(rotation * 3.14159/180));
+
+		if (!onScreen){
+			if (x < 1.77 && x > -1.77 && y < 1 && y > -1){
+				onScreen = true;
+			}
+		}
+		else{
+			if (x > 1.77 && x < -1.77 && y > 1 && y < -1){
+				shouldRemove = true;
+			}
+		}
+
+		model.Rotate(rotation * 3.14159 / 180);
+	}
+
+	bool sprite;
+	bool onScreen;
+
 	float x = 0;
 	float y = 0;
+	//in degrees
 	float rotation = 0;
 	
 	int textureID;
@@ -164,30 +214,144 @@ void movePlayer(Entity& player, float &elapsed){
 	const Uint8 *keys = SDL_GetKeyboardState(NULL);
 	
 	if (keys[SDL_SCANCODE_RIGHT]){
-		player.setIdentityMatrix();
-		player.translate(0, -0.8);
-		player.move(0.5 * elapsed, 0.0);
+		//player.setIdentityMatrix();
+		//player.translate(0, -0.8);
+		//player.move(0.5 * elapsed, 0.0);
+		player.rotate(-0.005);
 	}
 	else if (keys[SDL_SCANCODE_LEFT]){
-		player.setIdentityMatrix();
-		player.translate(0, -0.8);
-		player.move(-0.5 * elapsed, 0.0);
+		//player.setIdentityMatrix();
+		//player.translate(0, -0.8);
+		//player.move(-0.5 * elapsed, 0.0);
+		player.rotate(0.005);
+	}
+	if (keys[SDL_SCANCODE_SPACE]){
+		player.move(0.0, 0.25 * elapsed);
+	}
+}
+
+void spawnAstroid(vector<Entity> &astroids, ShaderProgram &program, GLuint &spriteSheet){
+	int astroidType = (rand() % 100 + 1)/10;
+	Entity temp = Entity(&program, spriteSheet, 224 / 1024.0, 664 / 1024.0, 101 / 1024.0, 84 / 1024.0, 1.5);
+	switch (astroidType)
+	{
+	case 1:
+		temp = Entity(&program, spriteSheet, 224 / 1024.0, 664 / 1024.0, 101 / 1024.0, 84 / 1024.0, 1.5);
+		break;
+	case 2:
+		temp = Entity(&program, spriteSheet, 0 / 1024.0, 520 / 1024.0, 120 / 1024.0, 98 / 1024.0, 1.5);
+		break;
+	case 3:
+		temp = Entity(&program, spriteSheet, 518 / 1024.0, 810 / 1024.0, 89 / 1024.0, 82 / 1024.0, 1.5);
+		break;
+	case 4:
+		temp = Entity(&program, spriteSheet, 327 / 1024.0, 452 / 1024.0, 98 / 1024.0, 96 / 1024.0, 1.5);
+		break;
+	case 5:
+		temp = Entity(&program, spriteSheet, 651 / 1024.0, 447 / 1024.0, 43 / 1024.0, 43 / 1024.0, 1.5);
+		break;
+	case 6:
+		temp = Entity(&program, spriteSheet, 237 / 1024.0, 452 / 1024.0, 45 / 1024.0, 40 / 1024.0, 1.5);
+		break;
+	case 7:
+		temp = Entity(&program, spriteSheet, 406 / 1024.0, 234 / 1024.0, 28 / 1024.0, 28 / 1024.0, 1.5);
+		break;
+	case 8:
+		temp = Entity(&program, spriteSheet, 778 / 1024.0, 587 / 1024.0, 29 / 1024.0, 26 / 1024.0, 1.5);
+		break;
+	case 9:
+		temp = Entity(&program, spriteSheet, 346 / 1024.0, 814 / 1024.0, 18 / 1024.0, 18 / 1024.0, 1.5);
+		break;
+	case 10:
+		temp = Entity(&program, spriteSheet, 399 / 1024.0, 814 / 1024.0, 16 / 1024.0, 15 / 1024.0, 1.5);
+	default:
+		break;
+	}
+	
+	temp.rotate(atan2((rand() % 200 - 100) / 100.0f, (rand() % 200 - 100) / 100.0f));
+	//temp.rotate(-83 * 3.14159 / 180);
+	astroids.push_back(temp);
+	astroids[astroids.size()-1].setMatrix();
+	int xVal = rand() % 190;
+	int yVal = rand() % 17;
+	while (xVal < 180 && yVal < 12){
+		xVal = rand() % 190;
+		yVal = rand() % 17;
+	}
+	int sign = rand() % 2;
+	int sign2 = rand() % 2;
+	if (sign == 0){ sign = -1; }
+	else{ sign = 1; }
+	if (sign2 == 0){ sign2 = -1; }
+	else{ sign2 = 1; }
+	
+	astroids[astroids.size() - 1].setPosition(xVal/100.0 * sign , yVal/10.0 * sign2 );
+
+	if (astroids[astroids.size() - 1].x > 1.77){
+		if (astroids[astroids.size() - 1].rotation > 0 && astroids[astroids.size() - 1].rotation < 180){
+			astroids[astroids.size() - 1].directionY = 1;
+		}
+		else if (astroids[astroids.size() - 1].rotation == 0){
+			astroids[astroids.size() - 1].directionX = -1;
+		}
+		else if (astroids[astroids.size() - 1].rotation == 180 || astroids[astroids.size() - 1].rotation == -180){
+			astroids[astroids.size() - 1].directionX = 1;
+		}
+		else{
+			astroids[astroids.size() - 1].directionY = -1;
+		}
+	}
+	else if (astroids[astroids.size() - 1].x < -1.77){
+		if (astroids[astroids.size() - 1].rotation < 0 && astroids[astroids.size() - 1].rotation > -180){
+			astroids[astroids.size() - 1].directionY = 1;
+		}
+		else if (astroids[astroids.size() - 1].rotation == 0){
+			astroids[astroids.size() - 1].directionX = 1;
+		}
+		else if (astroids[astroids.size() - 1].rotation == 180 || astroids[astroids.size() - 1].rotation == -180){
+			astroids[astroids.size() - 1].directionX = -1;
+		}
+		else{
+			astroids[astroids.size() - 1].directionY = -1;
+		}
+	}
+	if (astroids[astroids.size() - 1].y > 1){
+		if (astroids[astroids.size() - 1].rotation > 90 && astroids[astroids.size() - 1].rotation > -90){
+			astroids[astroids.size() - 1].directionY = 1;
+			astroids[astroids.size() - 1].directionX = -1;
+		}
+		else if (astroids[astroids.size() - 1].rotation == 90){
+			astroids[astroids.size() - 1].directionX = -1;
+		}
+		else if (astroids[astroids.size() - 1].rotation == -90 ){
+			astroids[astroids.size() - 1].directionX = 1;
+		}
+		else{
+			astroids[astroids.size() - 1].directionY = -1;
+		}
+	}
+	else if (astroids[astroids.size() - 1].y < -1){
+		if (astroids[astroids.size() - 1].rotation < 90 && astroids[astroids.size() - 1].rotation > -90){
+			astroids[astroids.size() - 1].directionY = 1;
+			astroids[astroids.size() - 1].directionX = -1;
+		}
+		else if (astroids[astroids.size() - 1].rotation == 90){
+			astroids[astroids.size() - 1].directionX = 1;
+		}
+		else if (astroids[astroids.size() - 1].rotation == -90){
+			astroids[astroids.size() - 1].directionX = -1;
+		}
+		else{
+			astroids[astroids.size() - 1].directionY = -1;
+		}
 	}
 }
 
 
-void moveEnemy(Entity& enemy, float elapsed){
-	if (enemy.x >= 1.7 || enemy.x <= -1.7){
-		if (enemy.x > 1.7){
-			enemy.setPosition(1.6999, enemy.y);
-		}
-		else{
-			enemy.setPosition(-1.6999, enemy.y);
-		}
-		enemy.directionX *= -1;
-		enemy.moveDown(0.1);
-	}
-	enemy.move(0.4 * elapsed * enemy.directionX, 0.0);
+void moveAstroid(Entity& astroid, float elapsed){
+
+	astroid.move(0.1 * elapsed * astroid.directionX, 0.1 * elapsed * astroid.directionY);
+	astroid.checkLocation();
 }
 
 void moveBullet(Entity& bullet, float elapsed, bool playerBullet){
@@ -335,38 +499,27 @@ void titleScreen(int& state, SDL_Event& event){
 void runGame(int& state, SDL_Event& event){
 	ShaderProgram program(RESOURCE_FOLDER"vertex_textured.glsl", RESOURCE_FOLDER"fragment_textured.glsl");
 	GLuint spriteSheet = LoadTexture("sheet.png");
+	GLuint alien = LoadTexture("alienBlue.png");
 
 	Mix_Chunk *killSound;
 	killSound = Mix_LoadWAV("sfxKill.wav");
 
 	Mix_Chunk *shootSound;
 	shootSound = Mix_LoadWAV("sfxShoot.wav");
-
-	Entity player = Entity(&program, spriteSheet, 211.0 / 1024.0, 941 / 1024.0, 99 / 1024.0, 75 / 1024.0, 0.1);
+	//<SubTexture name="alienBlue.png" x="412" y="175" width="66" height="92"/>
+	Entity player = Entity(&program, alien);
+	player.width = 66 / 1024.0f;
+	player.height = 92 / 1024.0f;
+	player.size = 1.5;
 	player.setPosition(0.0, -0.8);
 	//Entity playerBullet = Entity(&program, spriteSheet, 856 / 1024.0, 869 / 1024.0, 9 / 1024.0, 57 / 1024.0, 0.1);
 	//Entity enemyBullet = Entity(&program, spriteSheet, 856 / 1024.0, 602 / 1024.0, 9 / 1024.0, 37 / 1024.0, 0.1);
 	//Entity enemy = Entity(&program, spriteSheet, 425 / 1024.0, 384 / 1024.0, 93 / 1024.0, 84 / 1024.0, 0.1);
 	//Entity enemy2 = Entity(&program, spriteSheet, 425 / 1024.0, 384 / 1024.0, 93 / 1024.0, 84 / 1024.0, 0.1);
 
-	vector<Entity> playerBullets;
-	vector<Entity> enemies;
-	vector<Entity> enemyBullets;
-
-	for (int i = 0, j = 0, l = 0; i < 20; ++i, ++j){
-		Entity temp = Entity(&program, spriteSheet, 425 / 1024.0, 384 / 1024.0, 93 / 1024.0, 84 / 1024.0, 0.1);
-		if (j == 5){
-			j = 0;
-		}
-		if (j == 0){
-			++l;
-		}
-		enemies.push_back(temp);
-		enemies[i].setMatrix();
-		enemies[i].setPosition((1.77 / 5) * j, (0.99 / 5) * l);
-
-	}
-
+	vector<Entity> astroids;
+	float lastAstroidSpawnTime = 0;
+	
 	Time counter;
 	counter.lastFrameTicks = SDL_GetTicks() / 1000.0f;
 	float elapsed;
@@ -383,8 +536,7 @@ void runGame(int& state, SDL_Event& event){
 			}
 			else if (event.type == SDL_KEYDOWN){
 				if (event.key.keysym.scancode == SDL_SCANCODE_SPACE){
-					fireBullet(player, &playerBullets, true);
-					enemyFires(&enemies, &enemyBullets);
+					//fireBullet(player, &playerBullets, true);
 
 					Mix_PlayChannel(-1, shootSound, 0);
 				}
@@ -392,13 +544,17 @@ void runGame(int& state, SDL_Event& event){
 		}
 		glClear(GL_COLOR_BUFFER_BIT);
 
+		if (((float)SDL_GetTicks() / 1000.0f - lastAstroidSpawnTime) > 0.5){
+			spawnAstroid(astroids, program, spriteSheet);
+			lastAstroidSpawnTime = (float)SDL_GetTicks() / 1000.0f;
+		}
 		
 		elapsed = counter.getTime();
 
-		for (int i = 0; i < enemies.size(); ++i){
-			enemies[i].setMatrix();
-			enemies[i].Draw();
-			moveEnemy(enemies[i], elapsed);
+		for (int i = 0; i < astroids.size(); ++i){
+			astroids[i].setMatrix();
+			astroids[i].Draw();
+			moveAstroid(astroids[i], elapsed);
 		}
 
 		player.setMatrix();
@@ -406,50 +562,48 @@ void runGame(int& state, SDL_Event& event){
 
 		movePlayer(player, elapsed);
 
-		for (int i = 0; i < playerBullets.size(); ++i){
+		/*for (int i = 0; i < playerBullets.size(); ++i){
 			playerBullets[i].setMatrix();
 			playerBullets[i].Draw();
 			moveBullet(playerBullets[i], elapsed, true);
 			for (int j = 0; j < enemies.size(); ++j){
 				detectCollision(playerBullets[i], enemies[j], elapsed);
 			}
-		}
+		}*/
 
-		for (int i = 0; i < enemyBullets.size(); ++i){
+		/*for (int i = 0; i < enemyBullets.size(); ++i){
 			enemyBullets[i].setMatrix();
 			enemyBullets[i].Draw();
 			moveBullet(enemyBullets[i], elapsed, false);
 			detectCollision(enemyBullets[i], player, elapsed);
-		}
+		}*/
 
-		for (int i = 0; i < playerBullets.size(); ++i){
+		/*for (int i = 0; i < playerBullets.size(); ++i){
 			if (playerBullets[i].shouldRemove){
 				playerBullets.erase(playerBullets.begin() + i);
 				--i;
 			}
-		}
-		for (int i = 0; i < enemies.size(); ++i){
-			if (enemies[i].shouldRemove){
-				enemies.erase(enemies.begin() + i);
+		}*/
+		for (int i = 0; i < astroids.size(); ++i){
+			if (astroids[i].shouldRemove){
+				astroids.erase(astroids.begin() + i);
 				--i;
-
-				Mix_PlayChannel(-1, killSound, 0);
-
+				//Mix_PlayChannel(-1, killSound, 0);
 			}
 		}
 
-		for (int i = 0; i < enemyBullets.size(); ++i){
+		/*for (int i = 0; i < enemyBullets.size(); ++i){
 			if (enemyBullets[i].shouldRemove){
 				enemyBullets.erase(enemyBullets.begin() + i);
 				--i;
 			}
-		}
+		}*/
 
-		if (player.shouldRemove || enemies.size() == 0){
+		/*if (player.shouldRemove || enemies.size() == 0){
 			state = 2;
 			
 			break;
-		}
+		}*/
 
 		SDL_GL_SwapWindow(displayWindow);// keep at bottom
 	}
