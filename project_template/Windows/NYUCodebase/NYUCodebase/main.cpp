@@ -8,6 +8,7 @@
 #include "Matrix.h"
 #include <vector>
 #include <SDL_mixer.h>
+#include <time.h>
 using namespace std;
 
 #ifdef _WINDOWS
@@ -23,8 +24,8 @@ public:
 	Entity(ShaderProgram* shadeProgram, int texture) :program(shadeProgram), textureID(texture){ projection.setOrthoProjection(-1.777f, 1.777f, -1.0f, 1.0f, -1.0f, 1.0f); sprite = false; }
 	Entity(ShaderProgram *shadeProgram, int texture, float uCoord, float vCoord, float width, float height, float size) :program(shadeProgram), textureID(texture),
 	u(uCoord), v(vCoord), width(width), height(height), size(size){
-		//projection.setOrthoProjection(-1.777f, 1.777f, -1.0f, 1.0f, -1.0f, 1.0f);
-		projection.setOrthoProjection(-2.777f, 2.777f, -2.0f, 2.0f, -2.0f, 2.0f);
+		projection.setOrthoProjection(-1.777f, 1.777f, -1.0f, 1.0f, -1.0f, 1.0f);
+		//projection.setOrthoProjection(-2.777f, 2.777f, -2.0f, 2.0f, -2.0f, 2.0f);
 		sprite = true;
 	}
 
@@ -354,6 +355,8 @@ void moveAstroid(Entity& astroid, float elapsed){
 	astroid.checkLocation();
 }
 
+
+
 void moveBullet(Entity& bullet, float elapsed, bool playerBullet){
 	if (playerBullet){
 		bullet.move(0.0, 0.6 * elapsed);
@@ -393,16 +396,52 @@ void enemyFires(vector<Entity>* enemies, vector<Entity> *enemyBullets){
 	fireBullet((*enemies)[randomNum], enemyBullets, false);
 }
 
-void detectCollision(Entity& bullet, Entity& ship, float elapsed){
-	if ((bullet.x + bullet.width / 2) >= (ship.x - ship.width / 2) &&
-		(bullet.x - bullet.width / 2) <= (ship.x + ship.width / 2) &&
-		(bullet.y - bullet.height / 2) <= (ship.y + ship.height / 2) &&
-		(bullet.y + bullet.height / 2) >= (ship.y - ship.height / 2)){
-		bullet.shouldRemove = true;
-		ship.shouldRemove = true;
+bool detectCollision(Entity& first, Entity& second){
+	if ((first.x + first.width / 2) >= (second.x - second.width / 2) &&
+		(first.x - first.width / 2) <= (second.x + second.width / 2) &&
+		(first.y - first.height / 2) <= (second.y + second.height / 2) &&
+		(first.y + first.height / 2) >= (second.y - second.height / 2)){
+		return true;
 	}
-
+	return false;
 };
+
+int collidedWith(vector<Entity> &objects, Entity& item){
+	if (objects.size() == 0){ return -1; }
+	for (int i = 0; i < objects.size() - 1; ++i){
+		if (detectCollision(item, objects[i])){
+			return i;
+		}
+	}
+	return -1;
+}
+
+vector<float> randVals(){
+	int xVal = rand() % 170;
+	int yVal = rand() % 9;
+	int sign = rand() % 2;
+	int sign2 = rand() % 2;
+	if (sign == 0){ sign = -1; }
+	else{ sign = 1; }
+	if (sign2 == 0){ sign2 = -1; }
+	else{ sign2 = 1; }
+
+	vector<float> vals;
+	vals.push_back(xVal / 100.0 * sign);
+	vals.push_back(yVal / 10.0 * sign2);
+	return vals;
+}
+
+void spawnSpaceship(vector<Entity> &astroids, Entity& spaceShip){
+	spaceShip.setMatrix();
+	do{
+		vector<float> vals = randVals();
+		spaceShip.setPosition(vals[0], vals[1]);
+	} while (collidedWith(astroids, spaceShip) > -1);
+	spaceShip.onScreen = true;
+}
+
+
 //
 //void detectWin(Entity& ball, float& elapsed){
 //	if (ball.x >= 1.77 || ball.x <= -1.77){
@@ -511,7 +550,8 @@ void runGame(int& state, SDL_Event& event){
 	player.width = 66 / 1024.0f;
 	player.height = 92 / 1024.0f;
 	player.size = 1.5;
-	player.setPosition(0.0, -0.8);
+	vector<float> playerPosition = randVals();
+	player.setPosition(playerPosition[0], playerPosition[1]);
 	//Entity playerBullet = Entity(&program, spriteSheet, 856 / 1024.0, 869 / 1024.0, 9 / 1024.0, 57 / 1024.0, 0.1);
 	//Entity enemyBullet = Entity(&program, spriteSheet, 856 / 1024.0, 602 / 1024.0, 9 / 1024.0, 37 / 1024.0, 0.1);
 	//Entity enemy = Entity(&program, spriteSheet, 425 / 1024.0, 384 / 1024.0, 93 / 1024.0, 84 / 1024.0, 0.1);
@@ -519,12 +559,16 @@ void runGame(int& state, SDL_Event& event){
 
 	vector<Entity> astroids;
 	float lastAstroidSpawnTime = 0;
+	for (int i = 0; i < 10; ++i){
+		spawnAstroid(astroids, program, spriteSheet);
+	}
 	
 	Time counter;
 	counter.lastFrameTicks = SDL_GetTicks() / 1000.0f;
 	float elapsed;
 
-	//glUseProgram(program.programID);
+	Entity spaceShip = Entity(&program, spriteSheet, 444 / 1024.0, 91 / 1024.0, 91 / 1024.0, 91 / 1024.0, 2.5);
+	spawnSpaceship(astroids, spaceShip);
 
 	//SDL_Event event;
 	bool done = false;
@@ -544,9 +588,14 @@ void runGame(int& state, SDL_Event& event){
 		}
 		glClear(GL_COLOR_BUFFER_BIT);
 
+		
+
 		if (((float)SDL_GetTicks() / 1000.0f - lastAstroidSpawnTime) > 0.5){
 			spawnAstroid(astroids, program, spriteSheet);
 			lastAstroidSpawnTime = (float)SDL_GetTicks() / 1000.0f;
+			if (!spaceShip.onScreen){
+				spawnSpaceship(astroids, spaceShip);
+			}
 		}
 		
 		elapsed = counter.getTime();
@@ -561,6 +610,15 @@ void runGame(int& state, SDL_Event& event){
 		player.Draw();
 
 		movePlayer(player, elapsed);
+
+		if (spaceShip.onScreen){
+			spaceShip.setMatrix();
+			spaceShip.Draw();
+		}
+
+		if (collidedWith(astroids, spaceShip) > -1){
+			spaceShip.onScreen = false;
+		}
 
 		/*for (int i = 0; i < playerBullets.size(); ++i){
 			playerBullets[i].setMatrix();
@@ -646,6 +704,7 @@ void gameOver(int& state, SDL_Event& event){
 
 int main(int argc, char *argv[])
 {
+	srand(time(NULL));
 	SDL_Init(SDL_INIT_VIDEO);
 	displayWindow = SDL_CreateWindow("My Game", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL);
 	SDL_GLContext context = SDL_GL_CreateContext(displayWindow);
