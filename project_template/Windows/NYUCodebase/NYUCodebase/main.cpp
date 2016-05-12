@@ -9,6 +9,7 @@
 #include <vector>
 #include <SDL_mixer.h>
 #include <time.h>
+#include <math.h>
 using namespace std;
 
 #ifdef _WINDOWS
@@ -145,16 +146,21 @@ public:
 	void setPosition(float xPos, float yPos){
 		x = xPos;
 		y = yPos;
-		model.setPosition(x, y, 0.0);
+		model.setPosition(xPos, yPos, 0.0);
 	}
 
-	void rotate(float value){
-		rotation += value * 180/3.14159;
-		model.Rotate(value);
+	void rotate(float value){//in degrees
+		rotation += value;
+		model.Rotate(value * 3.14159 / 180);
 	}
 
+	void setRotation(float value){// given in degrees
+		model.Rotate(-1 * rotation * 3.14159 / 180);
+		rotation = value;
+		model.Rotate(value * 3.14159 / 180);
+	}
+	
 	void checkLocation(){
-		model.Rotate(-(rotation * 3.14159/180));
 
 		if (!onScreen){
 			if (x < 1.77 && x > -1.77 && y < 1 && y > -1){
@@ -166,8 +172,6 @@ public:
 				shouldRemove = true;
 			}
 		}
-
-		model.Rotate(rotation * 3.14159 / 180);
 	}
 
 	bool sprite;
@@ -175,8 +179,16 @@ public:
 
 	float x = 0;
 	float y = 0;
-	//in degrees
-	float rotation = 0;
+	
+	float rotation = 0;//in degrees
+
+	//world coordinates
+	float WorldX = 0;
+	float WorldY = 0;
+	vector<float> UR;
+	vector<float> UL;
+	vector<float> LL;
+	vector<float> LR;
 	
 	int textureID;
 
@@ -191,6 +203,8 @@ public:
 	float directionY = 1.0;
 
 	bool shouldRemove = false;
+
+	float lifetime = 0;
 
 	ShaderProgram *program;
 	Matrix model, projection, view;
@@ -211,23 +225,161 @@ public:
 	}
 };
 
-void movePlayer(Entity& player, float &elapsed){
+GLuint LoadTexture(const char *image_path) {
+	SDL_Surface *surface = IMG_Load(image_path);
+	GLuint textureID;
+	glGenTextures(1, &textureID);
+	glBindTexture(GL_TEXTURE_2D, textureID);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0, GL_RGBA,
+		GL_UNSIGNED_BYTE, surface->pixels);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	SDL_FreeSurface(surface);
+
+	return textureID;
+}
+
+
+void fireParticle(Entity& player, vector<Entity>* particles, int direction){
+	if (particles->size() > 5){ return; }
+	GLuint smoke = LoadTexture("whitePuff06.png");
+	Entity temp = Entity(player.program, smoke);
+	temp.size = 0.4;
+	temp.width = 400 * temp.size / 1024.0f; //400
+	temp.height = 383 * temp.size / 1024.0f; //383
+	temp.setPosition(player.x, player.y);
+	
+	switch (direction){
+	case 1:
+		temp.directionX = 0;
+		temp.directionY = -1;
+		temp.speed = 0.25;
+		break;
+	default:
+		break;
+	}
+
+	particles->push_back(temp);
+}
+
+void movePlayer(Entity& player, vector<Entity>* airParticles, float &elapsed){
 	const Uint8 *keys = SDL_GetKeyboardState(NULL);
+
+	int direction = 0;
 	
 	if (keys[SDL_SCANCODE_RIGHT]){
-		//player.setIdentityMatrix();
-		//player.translate(0, -0.8);
-		//player.move(0.5 * elapsed, 0.0);
-		player.rotate(-0.005);
+		direction += 3;
 	}
 	else if (keys[SDL_SCANCODE_LEFT]){
-		//player.setIdentityMatrix();
-		//player.translate(0, -0.8);
-		//player.move(-0.5 * elapsed, 0.0);
-		player.rotate(0.005);
+		direction += 9;
 	}
-	if (keys[SDL_SCANCODE_SPACE]){
-		player.move(0.0, 0.25 * elapsed);
+	if (keys[SDL_SCANCODE_UP]){
+		direction += 1;
+	}
+	else if (keys[SDL_SCANCODE_DOWN]){
+		direction += 5;
+	}
+
+	if (direction > 0){
+		player.setRotation(0);
+	}
+	switch (direction){
+	case 1:
+		player.move(0.0, 0.15*elapsed);
+		player.setRotation(0);
+		break;
+	case 3:
+		player.move(0.15 * elapsed, 0.0);
+		player.setRotation(-90);
+		break;
+	case 4:
+		player.move(0.15 * elapsed, 0.15 * elapsed);
+		player.setRotation(-45);
+		break;
+	case 5:
+		player.move(0.0, -0.15 * elapsed);
+		player.setRotation(180);
+		break;
+	case 8:
+		player.move(0.15 * elapsed, -0.15 * elapsed);
+		player.setRotation(-135);
+		break;
+	case 9:
+		player.move(-0.15 * elapsed, 0.0);
+		player.setRotation(90);
+		break;
+	case 10:
+		player.move(-0.15 * elapsed, 0.15 * elapsed);
+		player.setRotation(45);
+		break;
+	case 14:
+		player.move(-0.15 * elapsed, -0.15 * elapsed);
+		player.setRotation(135);
+		break;
+	default:
+		break;
+	}
+
+	
+}
+
+void movePlayer2(Entity& player, float &elapsed){
+	const Uint8 *keys = SDL_GetKeyboardState(NULL);
+
+	int direction = 0;
+
+	if (keys[SDL_SCANCODE_D]){
+		direction += 3;
+	}
+	else if (keys[SDL_SCANCODE_A]){
+		direction += 9;
+	}
+	if (keys[SDL_SCANCODE_W]){
+		direction += 1;
+	}
+	else if (keys[SDL_SCANCODE_S]){
+		direction += 5;
+	}
+
+	if (direction > 0){
+		player.setRotation(0);
+	}
+
+	switch (direction){
+	case 1:
+		player.move(0.0, 0.15 * elapsed);
+		player.setRotation(0);
+		break;
+	case 3:
+		player.move(0.15 * elapsed, 0.0);
+		player.setRotation(-90);
+		break;
+	case 4:
+		player.move(0.15 * elapsed, 0.15 * elapsed);
+		player.setRotation(-45);
+		break;
+	case 5:
+		player.move(0.0, -0.15 * elapsed);
+		player.setRotation(180);
+		break;
+	case 8:
+		player.move(0.15 * elapsed, -0.15 * elapsed);
+		player.setRotation(-135);
+		break;
+	case 9:
+		player.move(-0.15 * elapsed, 0.0);
+		player.setRotation(90);
+		break;
+	case 10:
+		player.move(-0.15 * elapsed, 0.15 * elapsed);
+		player.setRotation(45);
+		break;
+	case 14:
+		player.move(-0.15 * elapsed, -0.15 * elapsed);
+		player.setRotation(135);
+		break;
+	default:
+		break;
 	}
 }
 
@@ -269,7 +421,7 @@ void spawnAstroid(vector<Entity> &astroids, ShaderProgram &program, GLuint &spri
 		break;
 	}
 	
-	temp.rotate(atan2((rand() % 200 - 100) / 100.0f, (rand() % 200 - 100) / 100.0f));
+	float tempRotation = atan2((rand() % 200 - 100) / 100.0f, (rand() % 200 - 100) / 100.0f);
 	//temp.rotate(-83 * 3.14159 / 180);
 	astroids.push_back(temp);
 	astroids[astroids.size()-1].setMatrix();
@@ -286,103 +438,65 @@ void spawnAstroid(vector<Entity> &astroids, ShaderProgram &program, GLuint &spri
 	if (sign2 == 0){ sign2 = -1; }
 	else{ sign2 = 1; }
 	
+	
 	astroids[astroids.size() - 1].setPosition(xVal/100.0 * sign , yVal/10.0 * sign2 );
-
+	astroids[astroids.size() - 1].rotate(tempRotation);
+	int position = 0;
 	if (astroids[astroids.size() - 1].x > 1.77){
-		if (astroids[astroids.size() - 1].rotation > 0 && astroids[astroids.size() - 1].rotation < 180){
-			astroids[astroids.size() - 1].directionY = 1;
-		}
-		else if (astroids[astroids.size() - 1].rotation == 0){
-			astroids[astroids.size() - 1].directionX = -1;
-		}
-		else if (astroids[astroids.size() - 1].rotation == 180 || astroids[astroids.size() - 1].rotation == -180){
-			astroids[astroids.size() - 1].directionX = 1;
-		}
-		else{
-			astroids[astroids.size() - 1].directionY = -1;
-		}
+		position += 3;
 	}
 	else if (astroids[astroids.size() - 1].x < -1.77){
-		if (astroids[astroids.size() - 1].rotation < 0 && astroids[astroids.size() - 1].rotation > -180){
-			astroids[astroids.size() - 1].directionY = 1;
-		}
-		else if (astroids[astroids.size() - 1].rotation == 0){
-			astroids[astroids.size() - 1].directionX = 1;
-		}
-		else if (astroids[astroids.size() - 1].rotation == 180 || astroids[astroids.size() - 1].rotation == -180){
-			astroids[astroids.size() - 1].directionX = -1;
-		}
-		else{
-			astroids[astroids.size() - 1].directionY = -1;
-		}
+		position += 9;
 	}
 	if (astroids[astroids.size() - 1].y > 1){
-		if (astroids[astroids.size() - 1].rotation > 90 && astroids[astroids.size() - 1].rotation > -90){
-			astroids[astroids.size() - 1].directionY = 1;
-			astroids[astroids.size() - 1].directionX = -1;
-		}
-		else if (astroids[astroids.size() - 1].rotation == 90){
-			astroids[astroids.size() - 1].directionX = -1;
-		}
-		else if (astroids[astroids.size() - 1].rotation == -90 ){
-			astroids[astroids.size() - 1].directionX = 1;
-		}
-		else{
-			astroids[astroids.size() - 1].directionY = -1;
-		}
+		position += 1;
 	}
 	else if (astroids[astroids.size() - 1].y < -1){
-		if (astroids[astroids.size() - 1].rotation < 90 && astroids[astroids.size() - 1].rotation > -90){
-			astroids[astroids.size() - 1].directionY = 1;
-			astroids[astroids.size() - 1].directionX = -1;
-		}
-		else if (astroids[astroids.size() - 1].rotation == 90){
-			astroids[astroids.size() - 1].directionX = 1;
-		}
-		else if (astroids[astroids.size() - 1].rotation == -90){
-			astroids[astroids.size() - 1].directionX = -1;
-		}
-		else{
-			astroids[astroids.size() - 1].directionY = -1;
-		}
+		position += 5;
+	}
+	switch (position){
+	case 1:
+		astroids[astroids.size() - 1].directionX = rand() % 2;
+		astroids[astroids.size() - 1].directionY = -1;
+		break;
+	case 3:
+		astroids[astroids.size() - 1].directionY = rand() % 2;
+		astroids[astroids.size() - 1].directionX = -1;
+		break;
+	case 4:
+		astroids[astroids.size() - 1].directionX = -1;
+		astroids[astroids.size() - 1].directionY = -1;
+		break;
+	case 5:
+		astroids[astroids.size() - 1].directionX = rand() % 2;
+		astroids[astroids.size() - 1].directionY = 1;
+		break;
+	case 8:
+		astroids[astroids.size() - 1].directionX = -1;
+		astroids[astroids.size() - 1].directionY = 1;
+		break;
+	case 9:
+		astroids[astroids.size() - 1].directionY = rand() % 2;
+		astroids[astroids.size() - 1].directionX = 1;
+		break;
+	case 10:
+		astroids[astroids.size() - 1].directionX = 1;
+		astroids[astroids.size() - 1].directionY = -1;
+		break;
+	case 14:
+		astroids[astroids.size() - 1].directionX = 1;
+		astroids[astroids.size() - 1].directionY = 1;
+	default:
+		break;
 	}
 }
 
 
 void moveAstroid(Entity& astroid, float elapsed){
-
-	astroid.move(0.1 * elapsed * astroid.directionX, 0.1 * elapsed * astroid.directionY);
-	astroid.checkLocation();
-}
-
-
-
-void moveBullet(Entity& bullet, float elapsed, bool playerBullet){
-	if (playerBullet){
-		bullet.move(0.0, 0.6 * elapsed);
-		if (bullet.y > 0.99){
-			bullet.shouldRemove = true;
-		}
-	}
-	else{
-		bullet.move(0.0, -0.6 * elapsed);
-		if (bullet.y < -0.99){
-			bullet.shouldRemove = true;
-		}
-	}
-}
-
-void fireBullet(Entity& ship, vector<Entity>* bullets, bool playerBullet){
-	if (playerBullet){
-		Entity temp = Entity(ship.program, ship.textureID, 856 / 1024.0, 869 / 1024.0, 9 / 1024.0, 57 / 1024.0, 0.1);
-		temp.setPosition(ship.x, ship.y);
-		bullets->push_back(temp);
-	}
-	else{
-		Entity temp = Entity(ship.program, ship.textureID, 856 / 1024.0, 602 / 1024.0, 9 / 1024.0, 37 / 1024.0, 0.1);
-		temp.setPosition(ship.x, ship.y);
-		bullets->push_back(temp);
-	}
+	float rotation = astroid.rotation;
+	astroid.rotate(-rotation);
+	astroid.move(0.20 * elapsed * astroid.directionX, 0.20 * elapsed * astroid.directionY);
+	astroid.rotate(rotation + 0.01);
 }
 
 void enemyFires(vector<Entity>* enemies, vector<Entity> *enemyBullets){
@@ -393,23 +507,33 @@ void enemyFires(vector<Entity>* enemies, vector<Entity> *enemyBullets){
 	else{
 		randomNum = 0;
 	}
-	fireBullet((*enemies)[randomNum], enemyBullets, false);
+	fireParticle((*enemies)[randomNum], enemyBullets, false);
 }
 
+
 bool detectCollision(Entity& first, Entity& second){
+	float firstRotation = first.rotation;
+	float secondRotation = second.rotation;
+	first.rotate(-1 *(firstRotation * 3.14159 / 180));
+	second.rotate(-1 * (secondRotation * 3.14159 / 180));
+
 	if ((first.x + first.width / 2) >= (second.x - second.width / 2) &&
 		(first.x - first.width / 2) <= (second.x + second.width / 2) &&
 		(first.y - first.height / 2) <= (second.y + second.height / 2) &&
 		(first.y + first.height / 2) >= (second.y - second.height / 2)){
+		first.rotate(firstRotation * 3.14159 / 180);
+		second.rotate(secondRotation * 3.14159 / 180);
 		return true;
 	}
+	first.rotate(firstRotation * 3.14159 / 180);
+	second.rotate(secondRotation * 3.14159 / 180);
 	return false;
 };
 
 int collidedWith(vector<Entity> &objects, Entity& item){
 	if (objects.size() == 0){ return -1; }
 	for (int i = 0; i < objects.size() - 1; ++i){
-		if (detectCollision(item, objects[i])){
+		if (detectCollision(objects[i], item)){
 			return i;
 		}
 	}
@@ -442,29 +566,8 @@ void spawnSpaceship(vector<Entity> &astroids, Entity& spaceShip){
 }
 
 
-//
-//void detectWin(Entity& ball, float& elapsed){
-//	if (ball.x >= 1.77 || ball.x <= -1.77){
-//		ball.x = 0.0;
-//		ball.y = 0.0;
-//		glClearColor((float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX, 1.0);
-//	}
-//}
 
-GLuint LoadTexture(const char *image_path) {
-	SDL_Surface *surface = IMG_Load(image_path);
-	GLuint textureID;
-	glGenTextures(1, &textureID);
-	glBindTexture(GL_TEXTURE_2D, textureID);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0, GL_RGBA,
-		GL_UNSIGNED_BYTE, surface->pixels);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	SDL_FreeSurface(surface);
 
-	
-	return textureID;
-}
 
 void DrawText(ShaderProgram *program, int fontTexture, std::string text, float size, float spacing) {
 	float texture_size = 1.0 / 16.0f;
@@ -509,26 +612,51 @@ void titleScreen(int& state, SDL_Event& event){
 	GLuint fontsheet = LoadTexture("font1.png");
 
 	Entity text = Entity(&program, fontsheet);
-	text.setPosition(-1.3, 0);
+	Entity text2 = Entity(&program, fontsheet);
+	Entity text3 = Entity(&program, fontsheet);
+	Entity text4 = Entity(&program, fontsheet);
+	Entity text5 = Entity(&program, fontsheet);
+	text.setPosition(-1.5, 0.2);
+	text2.setPosition(-0.4, 0.1);
+	text3.setPosition(-1.2, 0);
+	text4.setPosition(-0.7, -0.1);
+	text5.setPosition(-0.2, -0.2);
 	
 	bool done = false;
 	while (!done) {
 		while (SDL_PollEvent(&event)) {
 			if (event.type == SDL_QUIT || event.type == SDL_WINDOWEVENT_CLOSE) {
 				done = true;
-				state = 3;
+				state = 5;
 			}
 			else if (event.type == SDL_KEYDOWN){
-				if (event.key.keysym.scancode == SDL_SCANCODE_RETURN){
+				if (event.key.keysym.scancode == SDL_SCANCODE_N){
 					done = true;
 					state = 1;					
 				}
+				if (event.key.keysym.scancode == SDL_SCANCODE_Y){
+					done = true;
+					state = 2;
+				}
+				if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE){
+					done = true;
+					state = 5;
+				}
 			}
 		}
+		glClear(GL_COLOR_BUFFER_BIT);
 
 		text.setMatrix();
 		
-		DrawText(&program, fontsheet, "Space Invaders press enter", 0.1, 0.0);
+		DrawText(&program, fontsheet, "Welcome to Godspeed Trucking Frontier Organization", 0.06, 0.00);
+		text2.setMatrix();
+		DrawText(&program, fontsheet, "Or GTFO for short", 0.06, 0.0);
+		text3.setMatrix();
+		DrawText(&program, fontsheet, "please return to spaceship and continue voyage", 0.06, 0.0);
+		text4.setMatrix();
+		DrawText(&program, fontsheet, "Do you have any enemies?", 0.06, 0.0);
+		text5.setMatrix();
+		DrawText(&program, fontsheet, "(Y/N)", 0.06, 0.0);
 		
 
 		SDL_GL_SwapWindow(displayWindow);
@@ -539,9 +667,10 @@ void runGame(int& state, SDL_Event& event){
 	ShaderProgram program(RESOURCE_FOLDER"vertex_textured.glsl", RESOURCE_FOLDER"fragment_textured.glsl");
 	GLuint spriteSheet = LoadTexture("sheet.png");
 	GLuint alien = LoadTexture("alienBlue.png");
+	GLuint alien2 = LoadTexture("alienBeige.png");
 
-	Mix_Chunk *killSound;
-	killSound = Mix_LoadWAV("sfxKill.wav");
+	Mix_Chunk *teleportSound;
+	teleportSound = Mix_LoadWAV("sfxSpaceShipTeleport.wav");
 
 	Mix_Chunk *shootSound;
 	shootSound = Mix_LoadWAV("sfxShoot.wav");
@@ -552,14 +681,23 @@ void runGame(int& state, SDL_Event& event){
 	player.size = 1.5;
 	vector<float> playerPosition = randVals();
 	player.setPosition(playerPosition[0], playerPosition[1]);
-	//Entity playerBullet = Entity(&program, spriteSheet, 856 / 1024.0, 869 / 1024.0, 9 / 1024.0, 57 / 1024.0, 0.1);
-	//Entity enemyBullet = Entity(&program, spriteSheet, 856 / 1024.0, 602 / 1024.0, 9 / 1024.0, 37 / 1024.0, 0.1);
-	//Entity enemy = Entity(&program, spriteSheet, 425 / 1024.0, 384 / 1024.0, 93 / 1024.0, 84 / 1024.0, 0.1);
-	//Entity enemy2 = Entity(&program, spriteSheet, 425 / 1024.0, 384 / 1024.0, 93 / 1024.0, 84 / 1024.0, 0.1);
+	
+	bool secondPlayer = false;
+	if (state == 2){
+		secondPlayer = true;
+	}
+	Entity player2 = Entity(&program, alien2);
+	player2.width = 66 / 1024.0f;
+	player2.height = 92 / 1024.0f;
+	player2.size = 1.5;
+	playerPosition = randVals();
+	player2.setPosition(playerPosition[0], playerPosition[1]);
+
+	vector<Entity> airParticles;
 
 	vector<Entity> astroids;
 	float lastAstroidSpawnTime = 0;
-	for (int i = 0; i < 10; ++i){
+	for (int i = 0; i < 20; ++i){
 		spawnAstroid(astroids, program, spriteSheet);
 	}
 	
@@ -576,13 +714,12 @@ void runGame(int& state, SDL_Event& event){
 		while (SDL_PollEvent(&event)) {
 			if (event.type == SDL_QUIT || event.type == SDL_WINDOWEVENT_CLOSE) {
 				done = true;
-				state = 3;
+				state = 5;
 			}
 			else if (event.type == SDL_KEYDOWN){
-				if (event.key.keysym.scancode == SDL_SCANCODE_SPACE){
-					//fireBullet(player, &playerBullets, true);
-
-					Mix_PlayChannel(-1, shootSound, 0);
+				if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE){
+					done = true;
+					state = 0;
 				}
 			}
 		}
@@ -595,6 +732,7 @@ void runGame(int& state, SDL_Event& event){
 			lastAstroidSpawnTime = (float)SDL_GetTicks() / 1000.0f;
 			if (!spaceShip.onScreen){
 				spawnSpaceship(astroids, spaceShip);
+				Mix_PlayChannel(-1, teleportSound, 0);
 			}
 		}
 		
@@ -604,12 +742,25 @@ void runGame(int& state, SDL_Event& event){
 			astroids[i].setMatrix();
 			astroids[i].Draw();
 			moveAstroid(astroids[i], elapsed);
+			if (detectCollision(astroids[i], player)){
+				player.shouldRemove = true;
+			}
+			if (secondPlayer){
+				if (detectCollision(astroids[i], player2)){
+					player2.shouldRemove = true;
+				}
+			}
 		}
 
 		player.setMatrix();
 		player.Draw();
+		if (secondPlayer){
+			player2.setMatrix();
+			player2.Draw();
+			movePlayer2(player2, elapsed);
+		}
 
-		movePlayer(player, elapsed);
+		movePlayer(player, &airParticles, elapsed);
 
 		if (spaceShip.onScreen){
 			spaceShip.setMatrix();
@@ -620,54 +771,39 @@ void runGame(int& state, SDL_Event& event){
 			spaceShip.onScreen = false;
 		}
 
-		/*for (int i = 0; i < playerBullets.size(); ++i){
-			playerBullets[i].setMatrix();
-			playerBullets[i].Draw();
-			moveBullet(playerBullets[i], elapsed, true);
-			for (int j = 0; j < enemies.size(); ++j){
-				detectCollision(playerBullets[i], enemies[j], elapsed);
-			}
-		}*/
-
-		/*for (int i = 0; i < enemyBullets.size(); ++i){
-			enemyBullets[i].setMatrix();
-			enemyBullets[i].Draw();
-			moveBullet(enemyBullets[i], elapsed, false);
-			detectCollision(enemyBullets[i], player, elapsed);
-		}*/
-
-		/*for (int i = 0; i < playerBullets.size(); ++i){
-			if (playerBullets[i].shouldRemove){
-				playerBullets.erase(playerBullets.begin() + i);
-				--i;
-			}
-		}*/
 		for (int i = 0; i < astroids.size(); ++i){
 			if (astroids[i].shouldRemove){
 				astroids.erase(astroids.begin() + i);
 				--i;
-				//Mix_PlayChannel(-1, killSound, 0);
+				
 			}
 		}
 
-		/*for (int i = 0; i < enemyBullets.size(); ++i){
-			if (enemyBullets[i].shouldRemove){
-				enemyBullets.erase(enemyBullets.begin() + i);
-				--i;
+		if (secondPlayer){
+			if (player2.shouldRemove){
+				state = 3;
+				done = true;
 			}
-		}*/
-
-		/*if (player.shouldRemove || enemies.size() == 0){
-			state = 2;
-			
-			break;
-		}*/
+			if (detectCollision(spaceShip, player2)){
+				state = 4;
+				done = true;
+			}
+		}
+		
+		if (player.shouldRemove){
+			state = 3;
+			done = true;
+		}
+		if (detectCollision(spaceShip, player)){
+			state = 4;
+			done = true;
+		}
 
 		SDL_GL_SwapWindow(displayWindow);// keep at bottom
 	}
 
-	Mix_FreeChunk(killSound);
-	Mix_FreeChunk(shootSound);
+	Mix_FreeChunk(teleportSound);
+	//Mix_FreeChunk(shootSound);
 	
 }
 
@@ -676,26 +812,48 @@ void gameOver(int& state, SDL_Event& event){
 	GLuint fontsheet = LoadTexture("font1.png");
 
 	Entity text = Entity(&program, fontsheet);
+	Entity text1 = Entity(&program, fontsheet);
+	Entity text2 = Entity(&program, fontsheet);
 	text.setPosition(-1.3, 0);
+	text1.setPosition(-1.3, -0.2);
+	text2.setPosition(-1.3, -0.4);
 
 	bool done = false;
 	while (!done) {
 		while (SDL_PollEvent(&event)) {
 			if (event.type == SDL_QUIT || event.type == SDL_WINDOWEVENT_CLOSE) {
 				done = true;
-				state = 3;
+				state = 5;
 			}
 			else if (event.type == SDL_KEYDOWN){
 				if (event.key.keysym.scancode == SDL_SCANCODE_RETURN){
 					done = true;
-					state = 1;
+					state = 0;
+				}
+				if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE){
+					done = true;
+					state = 5;
 				}
 			}
 		}
-
 		text.setMatrix();
+		if (state == 3){
+			DrawText(&program, fontsheet, "It appears someone died...", 0.08, 0.0);
+		}
+		if (state == 4){
+			DrawText(&program, fontsheet, "The spaceship is now taking off", 0.08, 0.0);
+		}
 
-		DrawText(&program, fontsheet, "Game Over: Press enter to play again", 0.08, 0.0);
+		text1.setMatrix();
+		if (state == 3){
+			DrawText(&program, fontsheet, "Press Enter for reincarnation", 0.08, 0.0);
+		}
+		if (state == 4){
+			DrawText(&program, fontsheet, "Press Enter to request a new spaceship", 0.08, 0.0);
+		}
+
+		text2.setMatrix();
+		DrawText(&program, fontsheet, "Press Esc to GTFO", 0.08, 0.0);
 
 
 		SDL_GL_SwapWindow(displayWindow);
@@ -717,14 +875,16 @@ int main(int argc, char *argv[])
 
 	Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 4096);
 
-	enum gameState { MAIN, GAME, OVER, CLOSE};
+	enum gameState { MAIN, GAME, GAME2, OVER, WIN, CLOSE};
 	int state = MAIN;
 
 	Mix_Music *music;
-	music = Mix_LoadMUS("spaceInvadersMusic.mp3");
+	music = Mix_LoadMUS("Blue.mp3");
 
-	Mix_Chunk *dieSound;
-	dieSound = Mix_LoadWAV("sfxDie.wav");
+	Mix_Chunk *winSound;
+	winSound = Mix_LoadWAV("SpaceShip.wav");
+
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
 	bool done = false;
 	SDL_Event event;
@@ -735,18 +895,29 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		Mix_PlayMusic(music, -1);
+		//Mix_PlayMusic(music, -1);
 
 		switch (state){
 		case MAIN:
+			glClear(GL_COLOR_BUFFER_BIT);
 			titleScreen(state, event);
 			break;
 		case GAME:
+			Mix_PlayMusic(music, -1);
+			glClear(GL_COLOR_BUFFER_BIT);
+			runGame(state, event);
+			break;
+		case GAME2:
+			Mix_PlayMusic(music, -1);
 			glClear(GL_COLOR_BUFFER_BIT);
 			runGame(state, event);
 			break;
 		case OVER:
-			Mix_PlayChannel(-1, dieSound, 0);
+			//Mix_PlayChannel(-1, dieSound, 0);
+			gameOver(state, event);
+			break;
+		case WIN:
+			//Mix_PlayChannel(-1, winSound, 0);
 			gameOver(state, event);
 			break;
 		case CLOSE:
@@ -755,7 +926,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	Mix_FreeChunk(dieSound);
+	Mix_FreeChunk(winSound);
 	Mix_FreeMusic(music);
 
 	SDL_Quit();
